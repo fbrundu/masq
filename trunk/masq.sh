@@ -12,7 +12,8 @@ then
 	if test "$2" = "start"
 	then
 		# sets variables
-		echo -n 'Enter interface name for ad-hoc wireless network [default wlan0]: '
+		echo -n 'Enter name for interface connected'
+		echo -n ' to the local network [default wlan0]: '
 		read LAN
 
 		if test "$LAN" = ""
@@ -20,18 +21,28 @@ then
 			LAN='wlan0'
 		fi
 
-		echo -n 'Enter interface name for wired network [default eth0]: '
+		echo -n 'Enter name for interface connected'
+		echo -n ' to the internet [default eth0]: '
 		read INTERNET 
 
 		if test "$INTERNET" = ""
 		then
 			INTERNET='eth0'
 		fi
+		
+		echo -n 'Is the local interface a wireless'
+		echo -n ' interface? (y/n) [default y]: '
+		read resp
 
-		echo -n 'Enter essid of ad-hoc wireless network: '
-		read ESSID
+		if test "$resp" = "" || "$resp" = "y"
+		then
+			echo -n 'Enter essid for ad-hoc wireless network: '
+			read ESSID
+			LOCALWIRELESS=y;
+		fi
 
-		echo -n 'Enter IP Address for ad-hoc wireless network interface [default 192.168.1.2]: '
+		echo -n 'Enter IP Address for local interface'
+		echo -n ' [default 192.168.1.2]: '
 		read IPADDRESS
 
 		if test "$IPADDRESS" = ""
@@ -42,8 +53,13 @@ then
 		# restarts network interfaces with our parameters
 		sudo /etc/init.d/networking stop
 		sudo ifconfig $LAN down
-		sudo iwconfig $LAN mode Ad-Hoc
-		sudo iwconfig $LAN essid $ESSID
+		
+		if test "$LOCALWIRELESS" = "y"
+		then
+			sudo iwconfig $LAN mode Ad-Hoc 
+			sudo iwconfig $LAN essid $ESSID
+		fi
+		
 		sudo ifconfig $LAN up $IPADDRESS
 		sudo dhclient $INTERNET
 
@@ -66,7 +82,7 @@ then
 		sudo iptables -I FORWARD -i ${LAN} -d 192.168.0.0/255.255.0.0 -j DROP
 		sudo iptables -A FORWARD -i ${LAN} -s 192.168.0.0/255.255.0.0 -j ACCEPT
 		sudo iptables -A FORWARD -i ${INTERNET} -d 192.168.0.0/255.255.0.0 -j ACCEPT
-		sudo iptables -t nat -A POSTROUTING -o ${WAN} -j MASQUERADE
+		sudo iptables -t nat -A POSTROUTING -o ${INTERNET} -j MASQUERADE
 
 		# this is used to allow ip forwarding by our host (master) that is the
 		# default gateway for the slave
@@ -74,7 +90,10 @@ then
 
 		# sets reverse path filter on all interfaces; this could be problematic 
 		# if the slave is a multihomed host; we assume it isn't
-		for f in `ls /proc/sys/net/ipv4/conf/` ; do sudo sysctl net.ipv4.conf."$f".rp_filter=1 ; done
+		for f in `ls /proc/sys/net/ipv4/conf/` 
+		do 
+			sudo sysctl net.ipv4.conf."$f".rp_filter=1 
+		done
 
 		exit 0
 
@@ -94,7 +113,7 @@ elif test "$1" = "client"
 			ETH='eth0'
 		fi
 
-		echo -n 'Enter wireless network interface to use as bridge to master [default wlan0]: '
+		echo -n 'Enter network interface to use as bridge to master [default wlan0]: '
 		read WLAN
 		if test $WLAN = ""
 		then
@@ -119,20 +138,20 @@ elif test "$1" = "client"
 		fi
 
 		# restarts network interfaces with our parameters 
-		/etc/init.d/networking stop
-		/etc/init.d/wicd stop
-		killall dhclient
-		killall dhcpcd
-		ifconfig $ETH down
-		ifconfig $WLAN down
-		iwconfig $WLAN mode Ad-Hoc
-		iwconfig $WLAN essid $ESSID
-		ifconfig $WLAN up $IPADDRESS
+		sudo /etc/init.d/networking stop
+		sudo /etc/init.d/wicd stop
+		sudo killall dhclient
+		sudo killall dhcpcd
+		sudo ifconfig $ETH down
+		sudo ifconfig $WLAN down
+		sudo iwconfig $WLAN mode Ad-Hoc
+		sudo iwconfig $WLAN essid $ESSID
+		sudo ifconfig $WLAN up $IPADDRESS
 
 		# add our gateway as default gateway in the routing table
-		route add default gw $GATEWAY
+		sudo route add default gw $GATEWAY
 
-		cp /etc/resolv.conf.bak /etc/resolv.conf
+		sudo cp /etc/resolv.conf.bak /etc/resolv.conf
 
 		exit 0
 
