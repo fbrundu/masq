@@ -51,6 +51,7 @@ then
 		fi
 
 		# restarts network interfaces with our parameters
+		#
 		sudo /etc/init.d/networking stop
 		sudo ifconfig $LAN down
 		
@@ -63,33 +64,46 @@ then
 		sudo ifconfig $LAN up $IPADDRESS
 		sudo dhclient $INTERNET
 
-		# nats packets from and to the slave
+		# nats packets from and to the client
+		
+		# flushes filter table
 		sudo iptables -F
+
+		# flushes nat table
 		sudo iptables -t nat -F
 
+		# sets the policies for the chains in the filter 
+		# table: INPUT OUTPUT & FORWARD (list of rules)
 		sudo iptables -P INPUT ACCEPT
 		sudo iptables -P OUTPUT ACCEPT
 		sudo iptables -P FORWARD DROP
 
+		# inserts rules in the INPUT chain
 		sudo iptables -I INPUT 1 -i ${LAN} -j ACCEPT
 		sudo iptables -I INPUT 1 -i lo -j ACCEPT
+
+		# appends more rules at the end of the INPUT chain
 		sudo iptables -A INPUT -p UDP --dport bootps ! -i ${LAN} -j REJECT
 		sudo iptables -A INPUT -p UDP --dport domain ! -i ${LAN} -j REJECT
-
 		sudo iptables -A INPUT -p TCP ! -i ${LAN} -d 0/0 --dport 0:1023 -j DROP
 		sudo iptables -A INPUT -p UDP ! -i ${LAN} -d 0/0 --dport 0:1023 -j DROP
 
+		# inserts and appends rules in the FORWARD chain
 		sudo iptables -I FORWARD -i ${LAN} -d 192.168.0.0/255.255.0.0 -j DROP
 		sudo iptables -A FORWARD -i ${LAN} -s 192.168.0.0/255.255.0.0 -j ACCEPT
 		sudo iptables -A FORWARD -i ${INTERNET} -d 192.168.0.0/255.255.0.0 -j ACCEPT
+		
+		# appends at the POSTROUTING table the target MASQUERADE to map
+		# the destination address of a packet that is leaving with the network
+		# address of the interface the packet is going out
 		sudo iptables -t nat -A POSTROUTING -o ${INTERNET} -j MASQUERADE
 
-		# this is used to allow ip forwarding by our host (master) that is the
-		# default gateway for the slave
+		# this is used to allow ip forwarding by our host (server) that is the
+		# default gateway for the client
 		sudo sysctl net.ipv4.ip_forward=1;
 
 		# sets reverse path filter on all interfaces; this could be problematic 
-		# if the slave is a multihomed host; we assume it isn't
+		# if the client is a multihomed host; we assume it isn't
 		for f in `ls /proc/sys/net/ipv4/conf/` 
 		do 
 			sudo sysctl net.ipv4.conf."$f".rp_filter=1 
@@ -148,7 +162,7 @@ elif test "$1" = "client"
 		sudo iwconfig $WLAN essid $ESSID
 		sudo ifconfig $WLAN up $IPADDRESS
 
-		# add our gateway as default gateway in the routing table
+		# add the server as default gateway in the routing table
 		sudo route add default gw $GATEWAY
 
 		sudo cp /etc/resolv.conf.bak /etc/resolv.conf
