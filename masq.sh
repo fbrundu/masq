@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# catch Ctrl-C and restore previous configuration
+trap "echo 'Quitting..'; sudo $0 $1 stop" 2
+
+# ask something (first parameter) and eventually propose 
+# a default value (second parameter) 
 function ask {
     echo -n "Enter $1"
     if test -n "$2"
@@ -8,6 +13,32 @@ function ask {
     fi
     echo -n ": "
     read RESP
+}
+
+# select one interface (if a is provided as parameter, all
+# interfaces are shown, disabled too
+function select_iface {
+    
+    if test -n "$1" 
+    then
+	select iface in `ifconfig -s -$1 | awk '{if(NR!=1) print $1}' | tr '\n' ' '` 
+	do
+            break
+	done
+    else    
+	select iface in `ifconfig -s | awk '{if(NR!=1) print $1}' | tr '\n' ' '` 
+	do
+            break
+	done
+    fi
+}
+
+# select one essid from a list provided with scanning
+function select_essid {
+    select es in `sudo iwlist $1 scan | grep ESSID | grep -o "\".*\"" | tr -d "\""` 
+    do
+        break
+    done
 }
  
 if test "$#" != "2"
@@ -22,27 +53,38 @@ then
     if test "$2" = "start"
     then
         # sets variables
-        ask "name for interface connected to the local network" wlan0   
-        #echo -n 'Enter name for interface connected'
-	#echo -n ' to the local network [default wlan0]: '
-	#read LAN
-	LAN=$RESP;
-		
-	if test -z "$LAN"
-	then
-	    LAN='wlan0'
-	fi
+	echo 'Choose interface connected to the local network'
+        select_iface "a"
+        LAN=$iface;
 	
-	ask "name for interface connected to the internet" eth0
-	#echo -n 'Enter name for interface connected'
-	#echo -n ' to the internet [default eth0]: '
-	#read INTERNET 
-	INTERNET=$RESP;
-
-	if test -z "$INTERNET"
-	then
-	    INTERNET='eth0'
-	fi
+	# OBSOLETE
+        #ask "name for interface connected to the local network" wlan0   
+        ##echo -n 'Enter name for interface connected'
+	##echo -n ' to the local network [default wlan0]: '
+	##read LAN
+	#LAN=$RESP;
+       
+	#if test -z "$LAN"
+	#then
+	    #LAN='wlan0'
+	#fi
+	# END OBSOLETE
+	
+	echo 'Choose interface connected to the internet'
+	select_iface "a"
+	INTERNET=$iface;
+        # OBSOLETE
+	#ask "name for interface connected to the internet" eth0
+	##echo -n 'Enter name for interface connected'
+	##echo -n ' to the internet [default eth0]: '
+	##read INTERNET 
+	#INTERNET=$RESP;
+	
+	#if test -z "$INTERNET"
+	#then
+	    #INTERNET='eth0'
+	#fi
+	# END OBSOLETE
 		
 	echo -n 'Is the local interface a wireless'
 	echo -n ' interface? (y/n) [default y]: '
@@ -53,17 +95,24 @@ then
 	    while test -z "$ESSID"
 	    do
 		ask "essid for ad-hoc wireless network"
-	        #echo -n 'Enter essid for ad-hoc wireless network: '
+	        # OBSOLETE
+                #echo -n 'Enter essid for ad-hoc wireless network: '
 	        #read ESSID
+		# END OBSOLETE
 	        ESSID=$RESP;
 	    done
-	    LOCALWIRELESS=y;
+	    LOCALWIRELESS=1;
+	else
+	    LOCALWIRELESS=0;
 	fi
 
 	ask 'IP address for local interface' '192.168.1.2'
-	#echo -n 'Enter IP Address for local interface'
+	
+	# OBSOLETE
+        #echo -n 'Enter IP Address for local interface'
 	#echo -n ' [default 192.168.1.2]: '
 	#read IPADDRESS
+	# END OBSOLETE
 	IPADDRESS=$RESP;
 		
 	if test -z "$IPADDRESS"
@@ -77,7 +126,7 @@ then
 	sudo /etc/init.d/networking stop
 	sudo ifconfig $LAN down
 		
-	if test "$LOCALWIRELESS" = "y"
+	if [[ $LOCALWIRELESS ]]
 	then
 	    sudo iwconfig $LAN mode Ad-Hoc 
 	    sudo iwconfig $LAN essid $ESSID
@@ -163,46 +212,100 @@ then
     if test "$2" = "start"
     then
 
-        # sets variables
-        # TODO: * ask which interfaces (if there're more than one) it has to bring down
-	ask 'network interface to set down' 'eth0'
-        #echo -n 'Enter network interface to set down [default eth0]: '
-        #read DOWN
-	DOWN=$RESP
-	if test -z $DOWN
+        # pulls down other interfaces
+        while [[ "$PULLDOWN" != "n" ]] || [[ "$PULLDOWN" != "no" ]]
+	do
+	    echo '--Network interfaces UP'
+	    ifconfig -s | awk '{if(NR!=1) print $1}' | tr '\n' ' '
+	    echo
+	    echo 'Do you want to pull down anyone of these?'
+	    read PULLDOWN
+	    if [[ "$PULLDOWN" = "y" ]] || [[ "$PULLDOWN" = "yes" ]]
+	    then
+		echo 'Select network interface(s) to set down'
+		select_iface
+		sudo ifconfig $iface down
+	    fi
+        done
+	
+	# OBSOLETE
+        #ask 'network interface to set down' 'eth0'
+        ##echo -n 'Enter network interface to set down [default eth0]: '
+        ##read DOWN
+	#DOWN=$RESP
+	#if test -z $DOWN
+	#then
+    	    #DOWN='eth0'
+	#fi
+	# END OBSOLETE
+	
+	echo 'Select network interface to use as bridge to server'
+	select_iface
+	LINK=$iface;
+	
+	# OBSOLETE
+	#ask 'network interface to use as bridge to master' wlan0
+        ##echo -n 'Enter network interface to use as bridge to master [default wlan0]: '
+        ##read LINK
+	#LINK=$RESP;
+	#if test -z $LINK
+	#then
+	    #LINK='wlan0'
+	#fi
+	# END OBSOLETE
+	
+	echo -n 'Is the local interface a wireless'
+	echo -n ' interface? (y/n) [default y]: '
+	read resp
+
+	if test "$resp" = "" || test "$resp" = "y"
 	then
-    	    DOWN='eth0'
+	    LOCALWIRELESS=1;
+	    while test -z $ESSID
+	    do 
+		echo 'Enter essid of the wireless network you want to use'
+		select write_scan in 'I want to insert essid manually' 'I want to scan for active network essids' 
+		do
+		    if [[ $write_scan -eq 1 ]]
+		    then
+			ask 'ad-hoc wireless network essid'
+            
+	                # OBSOLETE
+                        #echo -n 'Enter ad-hoc wireless network essid: '
+                        #read ESSID
+	                # END OBSOLETE
+		        ESSID=$RESP;
+		    else
+			select_essid $LINK
+			ESSID=$es;
+		    fi
+		break
+	    done
+	done
+	else
+	    LOCALWIRELESS=0;
 	fi
 
-	ask 'network interface to use as bridge to master' wlan0
-        #echo -n 'Enter network interface to use as bridge to master [default wlan0]: '
-        #read WLAN
-	WLAN=$RESP;
-	if test -z $WLAN
-	then
-	    WLAN='wlan0'
-	fi
-	
 	ask 'ip address you want to use' '192.168.1.3'
+        
+	# OBSOLETE
         #echo -n 'Enter ip address you want to use [default 192.168.1.3]: '
         #read IPADDRESS
+	# END OBSOLETE
+
 	IPADDRESS=$RESP;
 	if test -z $IPADDRESS
 	then
 	    IPADDRESS='192.168.1.3'
 	fi
 	
-	while test -z $ESSID
-	do 
-	    ask 'ad-hoc wireless network essid'
-            #echo -n 'Enter ad-hoc wireless network essid: '
-            #read ESSID
-            ESSID=$RESP;
-	done
-
 	ask 'gateway (master) ip address' '192.168.1.2'
+        
+	# OBSOLETE
         #echo -n 'Enter gateway (master) ip address [default 192.168.1.2]: '
         #read GATEWAY
+	# END OBSOLETE
+
 	if test -z $GATEWAY
 	then
 	    GATEWAY='192.168.1.2'
@@ -210,14 +313,20 @@ then
 
         # restarts network interfaces with our parameters 
 	sudo /etc/init.d/networking stop
-	sudo /etc/init.d/wicd stop
-	sudo killall dhclient
+	if [[ $LOCALWIRELESS ]]
+	then
+	    sudo /etc/init.d/wicd stop
+	fi
+        sudo killall dhclient
 	sudo killall dhcpcd
-	sudo ifconfig $DOWN down
-	sudo ifconfig $WLAN down
-	sudo iwconfig $WLAN mode Ad-Hoc
-	sudo iwconfig $WLAN essid $ESSID
-	sudo ifconfig $WLAN up $IPADDRESS
+	
+	sudo ifconfig $LINK down
+	if [[ $LOCALWIRELESS ]]
+	then
+	    sudo iwconfig $LINK mode Ad-Hoc
+	    sudo iwconfig $LINK essid $ESSID
+	fi
+        sudo ifconfig $LINK up $IPADDRESS
     
         # add the server as default gateway in the routing table
 	sudo route add default gw $GATEWAY
