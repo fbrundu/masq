@@ -88,6 +88,9 @@ then
 	
 	# nats packets from and to the client
 	
+	# saves pre-configuration
+	sudo iptables-save -c > "$HOME/.msq-iptables.bkp"
+	
 	# flushes filter table
 	sudo iptables -F
 
@@ -128,13 +131,30 @@ then
 	# if the client is a multihomed host; we assume it isn't
 	for f in `ls /proc/sys/net/ipv4/conf/` 
 	do 
-	    sudo sysctl net.ipv4.conf."$f".rp_filter=1 
+	    sudo sysctl net.ipv4.conf."$f".rp_filter=1; 
 	done
 
 	exit 0
 
-    #elif test "$2" = "stop"
-    #then
+    elif test "$2" = "stop"
+    then
+	
+        # unsets ip packets forwarding
+	sudo sysctl net.ipv4.ip_forward=0;
+	
+	# unsets reverse path filter on all interfaces
+	for f in `ls /proc/sys/net/ipv4/conf/` 
+	do 
+	    sudo sysctl net.ipv4.conf."$f".rp_filter=0; 
+	done
+
+	# restore pre-configuration
+	sudo iptables-restore -c < "$HOME/.msq-iptables.bkp"
+
+	# restarts networking subsystem
+	sudo /etc/init.d/networking start
+    
+	exit 0
     fi
 
 elif test "$1" = "client"
@@ -202,12 +222,30 @@ then
         # add the server as default gateway in the routing table
 	sudo route add default gw $GATEWAY
 
+	# is this correct? should we swap the two paths?
 	sudo cp /etc/resolv.conf.bak /etc/resolv.conf
 
 	exit 0
 
-    #elif test "$2" = "stop"
-    #then
+    elif test "$2" = "stop"
+    then
+	
+	# wiping away the default route
+	sudo route del default
+	
+	# restores network interfaces
+	sudo /etc/init.d/networking start
+	sudo /etc/init.d/wicd start
+	
+	sudo dhclient 
+	
+        # is this necessary?
+	sudo dhcpcd
+
+	# is this correct?
+        #sudo mv /etc/resolv.conf.bak /etc/resolv.conf
+	
+	exit 0
     fi
 
 fi
