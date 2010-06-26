@@ -29,9 +29,9 @@ function select_iface {
     	break
 	done
     else    
-		select iface in `ifconfig -s | awk '{if(NR!=1) print $1}' | tr '\n' ' '` 
-		do
-        	break
+	    select iface in `ifconfig -s | awk '{if(NR!=1) print $1}' | tr '\n' ' '` 
+	    do
+       	    break
 		done
     fi
 }
