@@ -1,6 +1,7 @@
 #!/bin/bash
 
-# catch Ctrl-C and restore previous configuration TODO: restore config
+# catch Ctrl-C and restore previous configuration 
+# TODO: restore config
 trap "echo 'Quitting..'; " 2
 
 DEBUG_UI=0;
@@ -22,7 +23,7 @@ function ask {
 # interfaces are shown, disabled too
 function select_iface {
     
-    if test -n "$1" 
+    if [ -n "$1" ] 
     then
     select iface in `ifconfig -s -$1 | awk '{if(NR!=1) print $1}' | tr '\n' ' '` 
     do
@@ -44,6 +45,7 @@ function select_essid {
     done
 }
  
+# TODO: command line options parser
 if [ $# -lt 2 ]
 then
     echo '  Usage: masq server|client start|stop [-d]'
@@ -72,7 +74,7 @@ then
         
         if [ $? -eq 0 ]
         then
-            while test -z "$ESSID"
+            while [ -z "$ESSID" ]
             do
                 ask "essid for ad-hoc wireless network"
                 ESSID=$RESP;
@@ -85,7 +87,7 @@ then
         ask 'IP address for local interface' '192.168.1.2'
         IPADDRESS=$RESP;
             
-        if test -z "$IPADDRESS"
+        if [ -z "$IPADDRESS" ]
         then
             IPADDRESS='192.168.1.2'
         fi
@@ -165,7 +167,7 @@ then
         fi
         exit 0
 
-    elif test "$2" = "stop"
+    elif [ "$2" = "stop" ]
     then
     
         if [ $DEBUG_UI -eq 0 ]
@@ -188,23 +190,23 @@ then
         exit 0
     fi
 
-elif test "$1" = "client"
+elif [ "$1" = "client" ]
 then
     
-    if test "$2" = "start"
+    if [ "$2" = "start" ]
     then
         
         if [ $DEBUG_UI -eq 0 ]
         then
             # pulls down other interfaces
-            while [[ "$PULLDOWN" != "n" ]] || [[ "$PULLDOWN" != "no" ]]
+            while [ "$PULLDOWN" != "n" ] || [ "$PULLDOWN" != "no" ]
             do
                 echo '--Network interfaces UP'
                 ifconfig -s | awk '{if(NR!=1) print $1}' | tr '\n' ' '
                 echo
                 echo 'Do you want to pull down anyone of these?'
                 read PULLDOWN
-                if [[ "$PULLDOWN" = "y" ]] || [[ "$PULLDOWN" = "yes" ]]
+                if [ "$PULLDOWN" = "y" ] || [ "$PULLDOWN" = "yes" ]
                 then
                     echo 'Select network interface(s) to set down'
                     select_iface
@@ -223,12 +225,12 @@ then
         if [ $? -eq 0 ]
         then
             LOCALWIRELESS=1;
-            while test -z $ESSID
+            while [ -z $ESSID ]
             do 
                 echo 'Enter essid of the wireless network you want to use by'
                 select ws in 'insertion' 'scanning' 
                 do
-                    if [[ $ws -eq 1 ]]
+                    if [ $ws -eq 1 ]
                     then
                         ask 'ad-hoc wireless network essid'
                         ESSID=$RESP;
@@ -247,7 +249,7 @@ then
         ask 'ip address you want to use' '192.168.1.3'
         IPADDRESS=$RESP;
         
-        if test -z $IPADDRESS
+        if [ -z $IPADDRESS ]
         then
             IPADDRESS='192.168.1.3'
         fi
@@ -255,7 +257,7 @@ then
         ask 'gateway (master) ip address' '192.168.1.2'
         GATEWAY=$RESP;
         
-        if test -z $GATEWAY
+        if [ -z $GATEWAY ]
         then
             GATEWAY='192.168.1.2'
         fi
@@ -272,7 +274,7 @@ then
         then
             # restarts network interfaces with our parameters 
             sudo /etc/init.d/networking stop
-            if [[ $LOCALWIRELESS ]]
+            if [ $LOCALWIRELESS ]
             then
                 sudo /etc/init.d/wicd stop
             fi
@@ -295,7 +297,7 @@ then
         fi
         exit 0
 
-    elif test "$2" = "stop"
+    elif [ "$2" = "stop" ]
     then
         if [ $DEBUG_UI -eq 0 ]
         then
