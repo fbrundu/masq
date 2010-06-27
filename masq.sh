@@ -2,9 +2,11 @@
 
 # catch Ctrl-C and restore previous configuration 
 # TODO: restore config
-trap "echo 'Quitting..'; " 2
+trap "echo 'Quitting..'; exit 2" 2
 
 DEBUG_UI=0;
+DM=0;
+NP=0;
 
 # ask something (first parameter) and eventually propose 
 # a default value (second parameter) 
@@ -48,12 +50,68 @@ function select_essid {
 # TODO: command line options parser
 if [ $# -lt 2 ]
 then
-    echo '  Usage: masq server|client start|stop [-d]'
+    echo
+    echo '  Usage: masq server|client start|stop [options]'
+    echo
+    echo '  --Available Options:'
+    echo
+    echo '      -d=ui' 
+    echo '      --debug=ui'
+    echo '          TO DEBUG UI'
+    echo '      -l=<local_interface_name>'
+    echo '      --local=<local_interface_name>' 
+    echo '          NAME ASSIGNED TO THE LOCAL LAN INTERFACE (NET BETWEEN CLIENT AND SERVER)'
+    echo '      -e=<extern_interface_name>'
+    echo '      --extern=<extern_interface_name>'
+    echo '          NAME ASSIGNED TO THE EXTERN NETWORK INTERFACE (NET BETWEEN SERVER AND INTERNET)'
+    echo '      -s=<essid>'
+    echo '      --essid=<essid>'
+    echo '          ESSID OF THE LOCAL WLAN INTERFACE (WLAN BETWEEN CLIENT AND SERVER)'
+    echo '      -np'
+    echo '      --no-pulldown'
+    echo '          DO NOT ASK FOR INTERFACES TO PULLDOWN AT STARTUP'
+    echo '      -dm'
+    echo '      --default-mode'
+    echo '          USE DEFAULT VALUES FOR NETWORK ADDRESSES'
+    echo
+    echo '  --Exit Values:'
+    echo
+    echo '      0 No error'
+    echo '      1 Not enough arguments'
+    echo '      2 Process interrupted by the user'
+    echo '      3 Wrong combinations of options'
+    echo
     exit 1
-elif [ "$3" = "-d" ]
-then
-    DEBUG_UI=1; 
 fi
+for i in $@
+do
+    case $i in
+    "server" | "client" | "start" | "stop")
+        ;;
+    "-d=ui" | "--debug=ui")
+        DEBUG_UI=1;
+        ;;
+    -l=[a-zA-Z0-9]* | --local=[a-zA-Z0-9]*)
+        LAN=`echo $i | cut -f 2 -d '='`;
+        ;;
+    -e=[a-zA-Z0-9]* | --extern=[a-zA-Z0-9]*)
+        EXT=`echo $i | cut -f 2 -d '='`;
+        ;;
+    -s=[a-zA-Z0-9]* | --essid=[a-zA-Z0-9]*)
+        ESSID=`echo $i | cut -f 2 -d '='`;
+        ;;
+    "-np" | "--no-pulldown")
+        NP=1;
+        ;;
+    "-dm" | "--default-mode")
+        DM=1
+        ;;
+    *)
+        echo 'Wrong combination of options'
+        exit 3
+        ;;
+    esac
+done
 
 if [ "$1" = "server" ]
 then
@@ -61,14 +119,20 @@ then
     if [ "$2" = "start" ]
     then
         # sets variables
-        echo 'Choose interface connected to the local network:'
-        select_iface "a"
-        LAN=$iface;
+        if [ -z "$LAN" ]
+        then
+            echo 'Choose interface connected to the local network:'
+            select_iface "a"
+            LAN=$iface;
+        fi
     
-        echo 'Choose interface connected to the internet:'
-        select_iface "a"
-        INTERNET=$iface;
-                
+        if [ -z "$EXT" ]
+        then
+            echo 'Choose interface connected to the internet:'
+            select_iface "a"
+            EXT=$iface;
+        fi
+
         # tests if local interface is wireless
         iwconfig $LAN &> /dev/null
         
@@ -84,9 +148,12 @@ then
             LOCALWIRELESS=0;
         fi
         
-        ask 'IP address for local interface' '192.168.1.2'
-        IPADDRESS=$RESP;
-            
+        if [ $DM -ne 1 ]
+        then
+            ask 'IP address for local interface' '192.168.1.2'
+            IPADDRESS=$RESP;
+        fi
+
         if [ -z "$IPADDRESS" ]
         then
             IPADDRESS='192.168.1.2'
@@ -95,7 +162,7 @@ then
         if [ $DEBUG_UI -eq 1 ]
         then
             echo "Local iface chosen: $LAN"
-            echo "Bridge iface chosen: $INTERNET"
+            echo "Bridge iface chosen: $EXT"
             echo "Local iface wireless: $LOCALWIRELESS essid: $ESSID"
             echo "Ip address: $IPADDRESS"
         fi
@@ -108,14 +175,14 @@ then
             sudo /etc/init.d/networking stop
             sudo ifconfig $LAN down
             
-            if [[ $LOCALWIRELESS ]]
+            if [ $LOCALWIRELESS ]
             then
                 sudo iwconfig $LAN mode Ad-Hoc 
                 sudo iwconfig $LAN essid $ESSID
             fi
                 
             sudo ifconfig $LAN up $IPADDRESS
-            sudo dhclient $INTERNET
+            sudo dhclient $EXT
             
             # nats packets from and to the client
             
@@ -147,12 +214,12 @@ then
             # inserts and appends rules in the FORWARD chain
             sudo iptables -I FORWARD -i ${LAN} -d 192.168.0.0/255.255.0.0 -j DROP
             sudo iptables -A FORWARD -i ${LAN} -s 192.168.0.0/255.255.0.0 -j ACCEPT
-            sudo iptables -A FORWARD -i ${INTERNET} -d 192.168.0.0/255.255.0.0 -j ACCEPT
+            sudo iptables -A FORWARD -i ${EXT} -d 192.168.0.0/255.255.0.0 -j ACCEPT
                 
             # appends at the POSTROUTING table the target MASQUERADE to map
             # the destination address of a packet that is leaving with the network
             # address of the interface the packet is going out
-            sudo iptables -t nat -A POSTROUTING -o ${INTERNET} -j MASQUERADE
+            sudo iptables -t nat -A POSTROUTING -o ${EXT} -j MASQUERADE
     
             # this is used to allow ip forwarding by our host (server) that is the
             # default gateway for the client
@@ -196,7 +263,7 @@ then
     if [ "$2" = "start" ]
     then
         
-        if [ $DEBUG_UI -eq 0 ]
+        if [ $DEBUG_UI -eq 0 ] && [ $NP -ne 1 ]
         then
             # pulls down other interfaces
             while [ "$PULLDOWN" != "n" ] || [ "$PULLDOWN" != "no" ]
@@ -214,13 +281,16 @@ then
                 fi
             done
         fi
+        
+        if [ -z "$LAN" ]
+        then
+            echo 'Select network interface to use as bridge to server'
+            select_iface
+            LAN=$iface;
+        fi
 
-        echo 'Select network interface to use as bridge to server'
-        select_iface
-        LINK=$iface;
-    
         # tests if link interface is wireless
-        iwconfig $LINK &> /dev/null
+        iwconfig $LAN &> /dev/null
         
         if [ $? -eq 0 ]
         then
@@ -228,15 +298,16 @@ then
             while [ -z $ESSID ]
             do 
                 echo 'Enter essid of the wireless network you want to use by'
-                select ws in 'insertion' 'scanning' 
+                select ws in insertion scanning 
                 do
-                    if [ $ws -eq 1 ]
+                    if [ "$ws" = "insertion" ]
                     then
                         ask 'ad-hoc wireless network essid'
                         ESSID=$RESP;
-                    else
+                    elif [ "$ws" = "scanning" ]
+                    then
                         echo 'Scanning..'
-                        select_essid $LINK
+                        select_essid $LAN
                         ESSID=$es;
                     fi
                     break
@@ -245,18 +316,24 @@ then
         else
             LOCALWIRELESS=0;
         fi
-
-        ask 'ip address you want to use' '192.168.1.3'
-        IPADDRESS=$RESP;
         
+        if [ $DM -ne 1 ]
+        then
+            ask 'ip address you want to use' '192.168.1.3'
+            IPADDRESS=$RESP;
+        fi
+
         if [ -z $IPADDRESS ]
         then
             IPADDRESS='192.168.1.3'
         fi
     
-        ask 'gateway (master) ip address' '192.168.1.2'
-        GATEWAY=$RESP;
-        
+        if [ $DM -ne 1 ]
+        then
+            ask 'gateway (master) ip address' '192.168.1.2'
+            GATEWAY=$RESP;
+        fi
+
         if [ -z $GATEWAY ]
         then
             GATEWAY='192.168.1.2'
@@ -264,7 +341,7 @@ then
         
         if [ $DEBUG_UI -eq 1 ]
         then
-            echo "Bridge iface: $LINK"
+            echo "Bridge iface: $LAN"
             echo "Local link wireless: $LOCALWIRELESS essid: $ESSID"
             echo "Ip address: $IPADDRESS"
             echo "Gateway: $GATEWAY"            
@@ -281,13 +358,13 @@ then
             sudo killall dhclient
             sudo killall dhcpcd
     
-            sudo ifconfig $LINK down
-            if [[ $LOCALWIRELESS ]]
+            sudo ifconfig $LAN down
+            if [ $LOCALWIRELESS ]
             then
-                sudo iwconfig $LINK mode Ad-Hoc
-                sudo iwconfig $LINK essid $ESSID
+                sudo iwconfig $LAN mode Ad-Hoc
+                sudo iwconfig $LAN essid $ESSID
             fi
-            sudo ifconfig $LINK up $IPADDRESS
+            sudo ifconfig $LAN up $IPADDRESS
     
             # add the server as default gateway in the routing table
             sudo route add default gw $GATEWAY
