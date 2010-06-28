@@ -4,9 +4,22 @@
 # TODO: restore config
 trap "echo 'Quitting..'; exit 2" 2
 
+# global variables
+
+# if 1 masq is started in debug mode for the ui
 DEBUG_UI=0;
+
+# if 1 masq sets default values for some variables
+# such ip address
 DM=0;
+
+# if 0 masq asks which interfaces to pulldown
+# at startup in client mode
 NP=0;
+
+# masq thinks by default that the interface of
+# the local lan is not a wireless interface
+LOCALWIRELESS=0;
 
 # ask something (first parameter) and eventually propose 
 # a default value (second parameter) 
@@ -47,7 +60,7 @@ function select_essid {
     done
 }
  
-# TODO: command line options parser
+# if we have not enough arguments prints help and exit with value 1
 if [ $# -lt 2 ]
 then
     echo
@@ -83,6 +96,8 @@ then
     echo
     exit 1
 fi
+
+# else parses options
 for i in $@
 do
     case $i in
@@ -113,12 +128,17 @@ do
     esac
 done
 
+# if mode is server
 if [ "$1" = "server" ]
 then
 
+    # if action is start
     if [ "$2" = "start" ]
     then
+        
         # sets variables
+        
+        # if local interface is not set asks for it
         if [ -z "$LAN" ]
         then
             echo 'Choose interface connected to the local network:'
@@ -126,6 +146,7 @@ then
             LAN=$iface;
         fi
     
+        # if extern interface is not set asks for it
         if [ -z "$EXT" ]
         then
             echo 'Choose interface connected to the internet:'
@@ -133,32 +154,36 @@ then
             EXT=$iface;
         fi
 
-        # tests if local interface is wireless
+        # tests if local interface is a wireless interface
         iwconfig $LAN &> /dev/null
         
+        # if local interface is a wireless interface
         if [ $? -eq 0 ]
         then
+            # asks for an essid for the WLAN to create
             while [ -z "$ESSID" ]
             do
                 ask "essid for ad-hoc wireless network"
                 ESSID=$RESP;
             done
             LOCALWIRELESS=1;
-        else
-            LOCALWIRELESS=0;
         fi
         
+        # if default mode is disabled asks for IP address
+        # for the local interface
         if [ $DM -ne 1 ]
         then
             ask 'IP address for local interface' '192.168.1.2'
             IPADDRESS=$RESP;
         fi
 
+        # if IPADDRESS is not set, uses the default value
         if [ -z "$IPADDRESS" ]
         then
             IPADDRESS='192.168.1.2'
         fi
         
+        # if DEBUG_UI is set, prints some variables
         if [ $DEBUG_UI -eq 1 ]
         then
             echo "Local iface chosen: $LAN"
@@ -166,22 +191,31 @@ then
             echo "Local iface wireless: $LOCALWIRELESS essid: $ESSID"
             echo "Ip address: $IPADDRESS"
         fi
-            
+        
+        # if DEBUG_UI is set, doesn't anything 
         if [ $DEBUG_UI -eq 0 ]
         then
-            # restarts network interfaces with our parameters
+            # else restarts network interfaces with our parameters
         
             # stops networking subsystem
             sudo /etc/init.d/networking stop
+            
+            # pulls down local interface
             sudo ifconfig $LAN down
             
+            # if local interface is a wireless interface
             if [ $LOCALWIRELESS ]
             then
+                # sets up mode and essid for that
                 sudo iwconfig $LAN mode Ad-Hoc 
                 sudo iwconfig $LAN essid $ESSID
             fi
-                
+            
+            # pulls up local interace 
             sudo ifconfig $LAN up $IPADDRESS
+
+            # calls dhcp configuration for the extern 
+            # interface
             sudo dhclient $EXT
             
             # nats packets from and to the client
@@ -268,6 +302,7 @@ then
             # pulls down other interfaces
             while [ "$PULLDOWN" != "n" ] || [ "$PULLDOWN" != "no" ]
             do
+                # prints active network interfaces 
                 echo '--Network interfaces UP'
                 ifconfig -s | awk '{if(NR!=1) print $1}' | tr '\n' ' '
                 echo
@@ -282,6 +317,8 @@ then
             done
         fi
         
+        # if local interface is not setted asks 
+        # the user which one to use
         if [ -z "$LAN" ]
         then
             echo 'Select network interface to use as bridge to server'
@@ -292,18 +329,22 @@ then
         # tests if link interface is wireless
         iwconfig $LAN &> /dev/null
         
+        # if wireless
         if [ $? -eq 0 ]
         then
             LOCALWIRELESS=1;
+            # asks for essid
             while [ -z $ESSID ]
             do 
                 echo 'Enter essid of the wireless network you want to use by'
                 select ws in insertion scanning 
                 do
+                    # essid is inserted manually by the user
                     if [ "$ws" = "insertion" ]
                     then
                         ask 'ad-hoc wireless network essid'
                         ESSID=$RESP;
+                    # essid is selected from a list of active essids
                     elif [ "$ws" = "scanning" ]
                     then
                         echo 'Scanning..'
@@ -313,32 +354,38 @@ then
                     break
                 done
             done
-        else
-            LOCALWIRELESS=0;
         fi
-        
+       
+        # if default mode is not setted, asks for ip address
         if [ $DM -ne 1 ]
         then
             ask 'ip address you want to use' '192.168.1.3'
             IPADDRESS=$RESP;
         fi
-
+        
+        # if ip address is not setted yet, 
+        # inserts default value
         if [ -z $IPADDRESS ]
         then
             IPADDRESS='192.168.1.3'
         fi
-    
+        
+        # if default mode is not setted, 
+        # asks for gateway address
         if [ $DM -ne 1 ]
         then
             ask 'gateway (master) ip address' '192.168.1.2'
             GATEWAY=$RESP;
         fi
-
+        
+        # if ip address is not setted yet, 
+        # inserts default value
         if [ -z $GATEWAY ]
         then
             GATEWAY='192.168.1.2'
         fi
         
+        # if in debug mode prints some values
         if [ $DEBUG_UI -eq 1 ]
         then
             echo "Bridge iface: $LAN"
@@ -347,6 +394,7 @@ then
             echo "Gateway: $GATEWAY"            
         fi
         
+        # if not in debug mode
         if [ $DEBUG_UI -eq 0 ]
         then
             # restarts network interfaces with our parameters 
@@ -355,15 +403,21 @@ then
             then
                 sudo /etc/init.d/wicd stop
             fi
+            
+            # kills all dhcp related process
             sudo killall dhclient
             sudo killall dhcpcd
-    
+            
+            # sets down local interface
             sudo ifconfig $LAN down
             if [ $LOCALWIRELESS ]
             then
+                # if it is a wireless interfaca
+                # inserts essid and set ad-hoc mode
                 sudo iwconfig $LAN mode Ad-Hoc
                 sudo iwconfig $LAN essid $ESSID
             fi
+            # sets up local interface
             sudo ifconfig $LAN up $IPADDRESS
     
             # add the server as default gateway in the routing table
@@ -384,7 +438,9 @@ then
             # restores network interfaces
             sudo /etc/init.d/networking start
             sudo /etc/init.d/wicd start
-        
+            
+            # starts dhclient to obtain
+            # a lease
             sudo dhclient 
         
             # is this necessary?
