@@ -40,12 +40,12 @@ function select_iface {
     
     if [ -n "$1" ] 
     then
-    select iface in `ifconfig -s -$1 | awk '{if(NR!=1) print $1}' | tr '\n' ' '` 
+    select iface in `sudo ifconfig -s -$1 | awk '{if(NR!=1) print $1}' | tr '\n' ' '` 
     do
         break
     done
     else    
-        select iface in `ifconfig -s | awk '{if(NR!=1) print $1}' | tr '\n' ' '` 
+        select iface in `sudo ifconfig -s | awk '{if(NR!=1) print $1}' | tr '\n' ' '` 
         do
             break
         done
@@ -304,7 +304,7 @@ then
             do
                 # prints active network interfaces 
                 echo '--Network interfaces UP'
-                ifconfig -s | awk '{if(NR!=1) print $1}' | tr '\n' ' '
+                sudo ifconfig -s | awk '{if(NR!=1) print $1}' | tr '\n' ' '
                 echo
                 echo 'Do you want to pull down anyone of these?'
                 read PULLDOWN
